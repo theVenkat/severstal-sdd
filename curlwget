@@ -1,0 +1,8 @@
+The Trick to download the data in a Snap:
+Step_1: Go to Google and type in CurlWget extension, and add it to your chrome or Firefox.
+Step_2: Check for the top right in your browser extension, it is now added to your chrome.
+Step_3: Now, for any download you make in our case its 9GB, just download the file like regularly BUT! cancel the download after 2 seconds.
+Step_4: Check for the Extension, you will see a huge text, when you scrool over the text, it say click to copy.
+Step_5: Just copy it, and open google colab where you are running the code and paste it after typing “!” and run the cell, example:
+!<paste_here>
+Step_6: Now it will take a few seconds or minutes to load it directly to your content of your google colab! Hurray!
