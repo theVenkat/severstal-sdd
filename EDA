@@ -1,0 +1,184 @@
+#importing usefull library
+import pandas as pd
+import numpy as np
+import os
+import cv2
+# visualization
+import matplotlib.pyplot as plt
+# plotly offline imports
+from plotly.offline import download_plotlyjs, init_notebook_mode, iplot
+from plotly import subplots
+import plotly.express as px
+import plotly.figure_factory as ff
+from plotly.graph_objs import *
+from plotly.graph_objs.layout import Margin, YAxis, XAxis
+
+# we use curlwget to import the data directly to the cloud
+# and install some packages below to extract them directly to the console of the colab
+
+
+!pip install pyunpack
+!pip install patool
+#above code to extract the files in the content path
+from pyunpack import Archive
+Archive('/content/train_images.zip').extractall('/content/train_images')
+
+#lets give a path just so that we dont need to enter everytime
+img_path = '/content/train_images/'
+
+train_df = pd.read_csv("/content/train.csv").fillna(-1)
+
+
+#Its give the information about
+train_df.info()
+# check the first image in the blog
+
+
+#Showing the 10 data from dataset csv file
+train_df.head(10)
+
+
+#Creting the dict with classId and Encoded pixcels and groupr all together
+#Creating the dict
+train_df['ClassId_EncodedPixels'] = train_df.apply(lambda row: (row['ClassId'], row['EncodedPixels']), axis = 1)
+
+#Groping together
+grouped_EncodedPixels = train_df.groupby('ImageId')['ClassId_EncodedPixels'].apply(list)
+
+print('No of unique Image: %s' % len(train_df['ImageId'].unique()))
+print('No of images having Minimum one defect: %s' % len(train_df[train_df['EncodedPixels'] != -1]['ImageId'].unique()))
+print('Total Traning sample: %s' % len(train_df[train_df['EncodedPixels'] != -1]))
+
+''' this will print
+No of unique Image: 6666
+No of images having Minimum one defect: 6666
+Total Traning sample: 7095 '''
+
+
+# picking up 10 examples for visualization
+examples = []
+for r in grouped_EncodedPixels.iteritems():
+  if (len([x[1] for x in r[1] if x[1] != -1]) == 2) and (len(examples) < 10):
+    examples.append(r[0])
+    
+
+def rle_to_mask(rle_string, height, width):
+  '''
+  convert RLE(run length encoding) string to numpy array
+  Parameters:
+  rle_string (str): string of rle encoded mask
+  height (int): height of the mask
+  width (int): width of the mask
+  Returns:
+  numpy.array: numpy array of the mask
+  '''
+  rows, cols = height, width
+  
+  if rle_string == -1:
+    return np.zeros((height, width))
+  else:
+    rle_numbers = [int(num_string) for num_string in rle_string.split(' ')]
+    rle_pairs = np.array(rle_numbers).reshape(-1,2)
+    img = np.zeros(rows*cols, dtype=np.uint8)
+    for index, length in rle_pairs:
+    index -= 1
+    img[index:index+length] = 255
+    img = img.reshape(cols,rows)
+    img = img.T
+    return img
+
+# visualize steel image with four classes of faults in seperate columns
+
+def viz_two_class_from_path(img_path, img_id, encoded_masks):
+  '''
+  visualize an image with two types of defects by plotting them on two columns
+  with the defect overlayed on top of the original image.
+  Parameters:
+  img_path (str): path of images
+  img_id (str): image id or filename of the path
+  encoded_masks (list): a list of strings of encoded masks
+  Returns:
+  matplotlib image plot in columns for two classes iwth defect
+  '''
+  img = cv2.imread(os.path.join(img_path, img_id))
+  fig, ax = plt.subplots(nrows=1, ncols=2, sharey=True, figsize=(20,10))
+  cmaps = ["Reds", "Blues", "Greens", "Purples"]
+  axid = 0
+  for idx, encoded_mask in enumerate(encoded_masks):
+    class_id = idx + 1
+      if encoded_mask == -1:
+      pass
+  else:
+    mask_decoded = rle_to_mask(encoded_mask, 256, 1600)
+    ax[axid].get_xaxis().set_ticks([])
+    ax[axid].get_yaxis().set_ticks([])
+    ax[axid].text(0.25, 0.25, 'Image Id: %s - Class Id: %s' % (img_id, class_id), fontsize=20)
+    ax[axid].imshow(img)
+    ax[axid].imshow(mask_decoded, alpha=0.15, cmap=cmaps[idx])
+    axid += 1
+
+
+# visualize the image we picked up earlier with mask
+for example in examples:
+  img_id = examples
+  mask_1, mask_2 = grouped_EncodedPixels[example]
+  masks = [mask_1[1], mask_2[1]]
+  viz_two_class_from_path('train_images/', example, masks
+  
+  
+ # calculate sum of the pixels for the mask per class id
+train_df['mask_pixel_sum'] = train_df.apply(lambda x: rle_to_mask(x['EncodedPixels'], width=1600, height=256).sum(), axis=1)
+
+# calculate the number of pictures without any label what so ever
+annotation_count = grouped_EncodedPixels.apply(lambda x: 1 if len([1 for y in x if y[1]!= -1]) > 0 else 0).value_counts()
+annotation_count_labels = ['No Label' if x == 0 else 'Label' for x in annotation_count.index]
+
+# calculate number of defects per image
+defects_count_df = grouped_EncodedPixels.apply(lambda x: len([1 for y in x if y[1] != -1]))
+defect_count_per_image = defects_count_df.value_counts()
+defect_count_labels = defect_count_per_image.index
+
+trace0 = Bar(x=annotation_count_labels, y=annotation_count, name = 'Labeled vs Not Labeled')
+trace1 = Bar(x=defect_count_labels, y=defect_count_per_image, name = 'Defects Per Image')
+fig = subplots.make_subplots(rows=1, cols=2)
+fig.append_trace(trace0, 1, 1)
+fig.append_trace(trace1, 1, 2)
+fig['layout'].update(height=400, width=900, title='Defect Labels and Defect Frequency PerImage')
+plot(fig)
+
+# visualize steel image with four classes of faults in seperate columns
+def viz_one_class_from_path(img_path, img_id, mask, class_id, text=None):
+  '''
+  visualize an image with two types of defects by plotting them on two columns
+  with the defect overlayed on top of the original image.
+  Parameters:
+  img_path (str): path of images
+  img_id (str): image id or filename of the path
+  encoded_mask (str): RLE mask
+  class_id (str): class id of the defect
+  Returns:
+  matplotlib image plot in columns for two classes with defect
+  '''
+  img = cv2.imread(os.path.join(img_path, img_id))
+  mask_decoded = rle_to_mask(mask, 256, 1600)
+  fig, ax = plt.subplots(figsize=(20,10))
+  cmaps = ["Reds", "Blues", "Greens", "Purples"]
+  ax.get_xaxis().set_ticks([])
+  ax.get_yaxis().set_ticks([])
+  if text:
+    ax.text(0.25, 0.25, text, fontsize=24)
+  ax.imshow(img)
+  ax.imshow(mask_decoded, alpha=0.15, cmap=cmaps[int(class_id)-1])
+  
+  def viz_per_class(train_df, class_id,text):
+    class_samples = train_df[(train_df['ClassId']==class_id)&(train_df['EncodedPixels']!=-1)].sample(2)
+    class_img_ids = class_samples['ImageId'].values
+    class_encoded_masks = class_samples['EncodedPixels'].values
+    for img_id, mask in zip(class_img_ids, class_encoded_masks):
+      viz_one_class_from_path(img_path, img_id, mask, class_id,text=text)
+      
+      
+  #we can now use the code to check each mask color of each class
+  viz_per_class(train_df, 1,"Picture have Defect of class 1 and the mask colour is Red")
+  
+  #I've added all the images and executions in the medium blog, please check them out to ease out
